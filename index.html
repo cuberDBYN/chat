@@ -254,7 +254,7 @@
     <script>
         // Supabase 접속 정보
         const FIXED_SUPABASE_URL = "https://hdyrcsodlcveljhqtvna.supabase.co";
-        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjQ1OTIsImV4cCI6MjEwNzgwMDU5Mn0.ROHKaLj3U6aWEyiqG3KAiPs6-pC86s8LhEgbfaD-UwU"; // ★ 282번째 줄: 이 쌍따옴표 안에 본인 키만 그대로 붙여넣어 주세요!
+        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjQ1OTIsImV4cCI6MjEwNzgwMDU5Mn0.ROHKaLj3U6aWEyiqG3KAiPs6-pC86s8LhEgbfaD-UwU"; // ★ 282번째 줄
 
         let supabaseClient = null;
         let currentUserId = '';
@@ -434,7 +434,7 @@
                         <div class="flex-1 overflow-hidden">
                             <div class="flex items-center space-x-2"><span class="font-bold text-xs text-slate-200">${escapeHtml(msg.nickname)}</span><span class="text-[10px] text-slate-500">${timeStr}</span></div>
                             <div class="text-sm text-slate-300 mt-0.5 break-words">${formatMessageContent(msg.content)}</div>
-                            ${msg.file_url ? `<div class="mt-2"><a href="${msg.file_url}" target="_blank" class="text-xs text-purple-400 underline"><i class="fa-solid fa-file mr-1"></i>${escapeHtml(msg.file_name || '첨부파일')}</a></div>` : ''}
+                            ${msg.file_url ? `<div class="mt-2"><a href="${msg.file_url}" target="_blank" class="text-xs text-purple-400 underline hover:text-purple-300 transition flex items-center space-x-1"><i class="fa-solid fa-file-arrow-down mr-1"></i><span>${escapeHtml(msg.file_name || '첨부파일 다운로드')}</span></a></div>` : ''}
                         </div>
                         ${canDelete ? `<button onclick="deleteMessage('${msg.id}')" class="absolute right-3 top-2 opacity-0 group-hover:opacity-100 text-rose-400 text-xs p-1" title="삭제"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>
@@ -468,6 +468,14 @@
             document.getElementById('filePreviewBar').classList.add('hidden');
         }
 
+        // 파일명 내 한글/공백/특수문자 정제 함수 (URL 깨짐 방지)
+        function sanitizeFileName(filename) {
+            const ext = filename.split('.').pop();
+            const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.'));
+            const cleanName = nameWithoutExt.replace(/[^a-zA-Z0-9]/g, '_');
+            return `${cleanName}_${Date.now()}.${ext}`;
+        }
+
         async function sendMessage() {
             const input = document.getElementById('messageInput');
             const content = input.value.trim();
@@ -475,10 +483,18 @@
 
             let fileUrl = null, fileName = null, fileType = null;
             if (selectedFile) {
-                const filePath = `${currentRoomId}/${Date.now()}_${selectedFile.name}`;
-                await supabaseClient.storage.from('chat-files').upload(filePath, selectedFile);
-                const { data } = supabaseClient.storage.from('chat-files').getPublicUrl(filePath);
-                fileUrl = data.publicUrl;
+                const safeName = sanitizeFileName(selectedFile.name);
+                const filePath = `${currentRoomId}/${safeName}`;
+                
+                const { data: uploadData, error: uploadError } = await supabaseClient.storage.from('chat-files').upload(filePath, selectedFile);
+                
+                if (uploadError) {
+                    alert('파일 업로드 실패: ' + uploadError.message);
+                    return;
+                }
+
+                const { data: urlData } = supabaseClient.storage.from('chat-files').getPublicUrl(filePath);
+                fileUrl = urlData.publicUrl;
                 fileName = selectedFile.name;
                 fileType = selectedFile.type;
             }
