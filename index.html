@@ -70,7 +70,7 @@
             <div class="p-3 border-b border-slate-800 space-y-2">
                 <div class="relative">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
-                    <input type="text" id="roomSearchInput" oninput="filterRooms()" placeholder="채팅방 검색..." class="w-full bg-darkBg border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-purple-500 text-slate-200">
+                    <input type="text" id="roomSearchInput" oninput="filterRooms()" autocomplete="off" placeholder="채팅방 검색..." class="w-full bg-darkBg border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-purple-500 text-slate-200">
                 </div>
                 <button onclick="openCreateRoomModal()" class="w-full bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 font-medium py-1.5 rounded-lg text-xs transition flex items-center justify-center space-x-1.5">
                     <i class="fa-solid fa-plus"></i><span>새 채팅방 만들기</span>
@@ -254,7 +254,7 @@
     <script>
         // ★ 내 Supabase 주소 및 키 고정
         const FIXED_SUPABASE_URL = "https://hdyrcsodlcveljhqtvna.supabase.co";
-        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjQ1OTIsImV4cCI6MjEwNzgwMDU5Mn0.ROHKaLj3U6aWEyiqG3KAiPs6-pC86s8LhEgbfaD-UwU"; // 본인의 실제 Anon Key로 되어 있는지 확인해주세요!
+        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjQ1OTIsImV4cCI6MjEwNzgwMDU5Mn0.ROHKaLj3U6aWEyiqG3KAiPs6-pC86s8LhEgbfaD-UwU"; // 따옴표 안에 키만 정확히 넣어주세요!
 
         let supabaseClient = null;
         let currentUserId = '';
@@ -271,6 +271,10 @@
         });
 
         function initUserSession() {
+            // 새로고침 시 검색창 잔상 방지를 위해 강제 초기화
+            const searchInput = document.getElementById('roomSearchInput');
+            if (searchInput) searchInput.value = '';
+
             let uid = localStorage.getItem('chatz_user_id');
             if (!uid) {
                 uid = 'user_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
@@ -358,7 +362,6 @@
             `).join('');
         }
 
-        // ★ 누락되었던 방 검색 필터 함수 추가 완료!
         function filterRooms() {
             const keyword = document.getElementById('roomSearchInput').value.toLowerCase();
             const filtered = rooms.filter(r => r.name.toLowerCase().includes(keyword) || (r.description && r.description.toLowerCase().includes(keyword)));
@@ -423,158 +426,4 @@
                         <div class="flex-1 overflow-hidden">
                             <div class="flex items-center space-x-2"><span class="font-bold text-xs text-slate-200">${escapeHtml(msg.nickname)}</span><span class="text-[10px] text-slate-500">${timeStr}</span></div>
                             <div class="text-sm text-slate-300 mt-0.5 break-words">${formatMessageContent(msg.content)}</div>
-                            ${msg.file_url ? `<div class="mt-2"><a href="${msg.file_url}" target="_blank" class="text-xs text-purple-400 underline"><i class="fa-solid fa-file mr-1"></i>${escapeHtml(msg.file_name || '첨부파일')}</a></div>` : ''}
-                        </div>
-                        ${canDelete ? `<button onclick="deleteMessage('${msg.id}')" class="absolute right-3 top-2 opacity-0 group-hover:opacity-100 text-rose-400 text-xs p-1" title="삭제"><i class="fa-solid fa-trash"></i></button>` : ''}
-                    </div>
-                `;
-            }).join('');
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function subscribeToMessages() {
-            activeMessageSubscription = supabaseClient.channel('room-' + currentRoomId)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoomId}` }, payload => {
-                    loadMessages();
-                }).subscribe();
-        }
-
-        function handleMessageKeyDown(e) {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-        }
-
-        function handleFileSelected(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            selectedFile = file;
-            document.getElementById('filePreviewName').innerText = file.name;
-            document.getElementById('filePreviewBar').classList.remove('hidden');
-        }
-
-        function cancelFileAttachment() {
-            selectedFile = null;
-            document.getElementById('fileInput').value = '';
-            document.getElementById('filePreviewBar').classList.add('hidden');
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('messageInput');
-            const content = input.value.trim();
-            if (!content && !selectedFile) return;
-
-            let fileUrl = null, fileName = null, fileType = null;
-            if (selectedFile) {
-                const filePath = `${currentRoomId}/${Date.now()}_${selectedFile.name}`;
-                await supabaseClient.storage.from('chat-files').upload(filePath, selectedFile);
-                const { data } = supabaseClient.storage.from('chat-files').getPublicUrl(filePath);
-                fileUrl = data.publicUrl;
-                fileName = selectedFile.name;
-                fileType = selectedFile.type;
-            }
-
-            await supabaseClient.from('messages').insert([{
-                room_id: currentRoomId, user_id: currentUserId, nickname: currentNickname,
-                content: content || '[파일]', file_url: fileUrl, file_name: fileName, file_type: fileType
-            }]);
-
-            input.value = '';
-            cancelFileAttachment();
-            loadMessages();
-        }
-
-        async function deleteMessage(msgId) {
-            if (!confirm('메시지를 삭제하시겠습니까?')) return;
-            await supabaseClient.from('messages').delete().eq('id', msgId);
-            loadMessages();
-        }
-
-        async function updateParticipantPresence() {
-            await supabaseClient.from('participants').upsert([{ room_id: currentRoomId, user_id: currentUserId, nickname: currentNickname }], { onConflict: 'room_id,user_id' });
-        }
-
-        async function loadParticipants() {
-            const { data } = await supabaseClient.from('participants').select('*').eq('room_id', currentRoomId);
-            const participants = data || [];
-            document.getElementById('participantCount').innerText = participants.length;
-            document.getElementById('participantListContainer').innerHTML = participants.map(p => `
-                <div class="flex items-center space-x-2 py-1 px-2"><div class="w-2 h-2 rounded-full bg-emerald-500"></div><span class="text-xs text-slate-300 truncate">${escapeHtml(p.nickname)}</span></div>
-            `).join('');
-        }
-
-        function updateRoomNoticeDisplay(notice) {
-            const bar = document.getElementById('roomNoticeBar');
-            if (notice) {
-                document.getElementById('roomNoticeContent').innerText = notice;
-                bar.classList.remove('hidden');
-            } else { bar.classList.add('hidden'); }
-        }
-
-        function closeRoomNoticeBar() { document.getElementById('roomNoticeBar').classList.add('hidden'); }
-        function openRoomNoticeModal() {
-            document.getElementById('roomNoticeModalText').innerText = currentRoomData?.notice || '등록된 공지가 없습니다.';
-            document.getElementById('roomNoticeModal').classList.remove('hidden');
-        }
-        function closeRoomNoticeModal() { document.getElementById('roomNoticeModal').classList.add('hidden'); }
-
-        function openRoomSettingsModal() {
-            document.getElementById('editRoomNameInput').value = currentRoomData.name;
-            document.getElementById('editRoomDescInput').value = currentRoomData.description || '';
-            document.getElementById('editRoomNoticeInput').value = currentRoomData.notice || '';
-            document.getElementById('roomSettingsModal').classList.remove('hidden');
-        }
-        function closeRoomSettingsModal() { document.getElementById('roomSettingsModal').classList.add('hidden'); }
-
-        async function saveRoomSettings() {
-            const name = document.getElementById('editRoomNameInput').value.trim();
-            const desc = document.getElementById('editRoomDescInput').value.trim();
-            const notice = document.getElementById('editRoomNoticeInput').value.trim();
-            await supabaseClient.from('rooms').update({ name, description: desc, notice }).eq('id', currentRoomId);
-            closeRoomSettingsModal();
-            loadRooms();
-        }
-
-        async function deleteCurrentRoom() {
-            if (!confirm('정말로 이 채팅방을 삭제하시겠습니까?')) return;
-            await supabaseClient.from('rooms').delete().eq('id', currentRoomId);
-            closeRoomSettingsModal();
-            currentRoomId = null;
-            loadRooms();
-        }
-
-        async function loadSiteNotice() {
-            const { data } = await supabaseClient.from('site_notices').select('*').order('created_at', { ascending: false }).limit(1);
-            if (data && data.length > 0) {
-                document.getElementById('siteNoticeText').innerText = data[0].content;
-                document.getElementById('siteNoticeBanner').classList.remove('hidden');
-                document.getElementById('siteNoticeModalContent').innerText = data[0].content;
-            }
-        }
-
-        function openNoticeModal() { document.getElementById('noticeModal').classList.remove('hidden'); }
-        function closeNoticeModal() { document.getElementById('noticeModal').classList.add('hidden'); }
-        function openAdminModal() { document.getElementById('adminModal').classList.remove('hidden'); }
-        function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); }
-
-        async function saveAdminNotice() {
-            const key = document.getElementById('adminKeyInput').value.trim();
-            const content = document.getElementById('adminNoticeInput').value.trim();
-            if (!key || !content) { alert('관리자 키와 내용을 입력하세요.'); return; }
-            await supabaseClient.from('site_notices').insert([{ content, admin_key: key }]);
-            alert('공지가 게시되었습니다.');
-            closeAdminModal();
-            loadSiteNotice();
-        }
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        }
-
-        function formatMessageContent(content) {
-            if (!content) return '';
-            const safe = escapeHtml(content);
-            return safe.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-purple-400 underline">$1</a>');
-        }
-    </script>
-</body>
-</html>
+                            ${msg.file_url ? `<div class="mt-2"><a href="${msg.file_url}" target="_blank" class="text-xs text-
