@@ -68,9 +68,11 @@
 
             <!-- 방 검색 및 생성 버튼 -->
             <div class="p-3 border-b border-slate-800 space-y-2">
+                <!-- 브라우저 자동완성 낚시용 가짜 입력창 -->
+                <input type="text" style="display:none;" aria-hidden="true">
                 <div class="relative">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
-                    <input type="text" id="roomSearchInput" oninput="filterRooms()" autocomplete="off" name="disable_autofill_input" spellcheck="false" placeholder="채팅방 검색..." class="w-full bg-darkBg border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-purple-500 text-slate-200">
+                    <input type="text" id="roomSearchInput" oninput="filterRooms()" autocomplete="off" name="random_search_field_z" spellcheck="false" placeholder="채팅방 검색..." class="w-full bg-darkBg border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-purple-500 text-slate-200">
                 </div>
                 <button onclick="openCreateRoomModal()" class="w-full bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 font-medium py-1.5 rounded-lg text-xs transition flex items-center justify-center space-x-1.5">
                     <i class="fa-solid fa-plus"></i><span>새 채팅방 만들기</span>
@@ -254,7 +256,7 @@
     <script>
         // ★ 내 Supabase 주소 및 키 고정
         const FIXED_SUPABASE_URL = "https://hdyrcsodlcveljhqtvna.supabase.co";
-        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjQ1OTIsImV4cCI6MjEwNzgwMDU5Mn0.ROHKaLj3U6aWEyiqG3KAiPs6-pC86s8LhEgbfaD-UwU"; // 따옴표 안에 키만 정확히 넣어주세요!
+        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjQ1OTIsImV4cCI6MjEwNzgwMDU5Mn0.ROHKaLj3U6aWEyiqG3KAiPs6-pC86s8LhEgbfaD-UwU"; // ★ 288번째 줄
 
         let supabaseClient = null;
         let currentUserId = '';
@@ -271,12 +273,23 @@
             clearSearchInputForce();
         });
 
+        // 브라우저의 지독한 자동완성 '큐버' 글자를 완벽히 날려버리는 강력 초기화
         function clearSearchInputForce() {
             const searchInput = document.getElementById('roomSearchInput');
             if (searchInput) {
                 searchInput.value = '';
-                setTimeout(() => { searchInput.value = ''; }, 100);
-                setTimeout(() => { searchInput.value = ''; }, 500);
+                // 브라우저가 뒤늦게 밀어넣는 타이밍을 다각도로 차단
+                const clearTimes = [50, 100, 200, 500, 1000];
+                clearTimes.forEach(ms => {
+                    setTimeout(() => {
+                        if (searchInput.value === '큐버') {
+                            searchInput.value = '';
+                            filterRooms();
+                        } else {
+                            searchInput.value = '';
+                        }
+                    }, ms);
+                });
             }
         }
 
@@ -530,7 +543,6 @@
             const bar = document.getElementById('roomNoticeBar');
             if (notice) {
                 document.getElementById('roomNoticeContent').innerText = notice;
-                bar.classList.0 && bar.classList.remove('hidden');
                 bar.classList.remove('hidden');
             } else { bar.classList.add('hidden'); }
         }
