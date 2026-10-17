@@ -252,9 +252,9 @@
 
     <!-- 핵심 로직 -->
     <script>
-        // ★ 내 Supabase 주소 및 키 고정 (다른 모든 사용자를 위한 설정)
+        // ★ 내 Supabase 주소 및 키 고정
         const FIXED_SUPABASE_URL = "https://hdyrcsodlcveljhqtvna.supabase.co";
-        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjQ1OTIsImV4cCI6MjEwNzgwMDU5Mn0.ROHKaLj3U6aWEyiqG3KAiPs6-pC86s8LhEgbfaD-UwU"; // 여기에 내 프로젝트의 긴 Anon Key를 넣어주세요!
+        const FIXED_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkeXJjc29kbGN2ZWxqaHF0dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzg1MDAsImV4cCI6MjA1NjgxNDUwMH0.placeholder_key_fix"; // 본인의 실제 Anon Key로 되어 있는지 확인해주세요!
 
         let supabaseClient = null;
         let currentUserId = '';
@@ -271,4 +271,310 @@
         });
 
         function initUserSession() {
-            let uid = localStorage
+            let uid = localStorage.getItem('chatz_user_id');
+            if (!uid) {
+                uid = 'user_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+                localStorage.setItem('chatz_user_id', uid);
+            }
+            currentUserId = uid;
+
+            let nick = localStorage.getItem('chatz_nickname');
+            if (!nick) {
+                nick = '익명_' + Math.floor(1000 + Math.random() * 9000);
+                localStorage.setItem('chatz_nickname', nick);
+            }
+            currentNickname = nick;
+            document.getElementById('userNicknameDisplay').innerText = currentNickname;
+        }
+
+        function initSupabaseAuto() {
+            try {
+                supabaseClient = window.supabase.createClient(FIXED_SUPABASE_URL, FIXED_SUPABASE_KEY);
+                loadRooms();
+                loadSiteNotice();
+            } catch (e) {
+                console.error("Supabase 초기화 에러:", e);
+            }
+        }
+
+        function openNicknameModal() {
+            document.getElementById('nicknameInput').value = currentNickname;
+            document.getElementById('nicknameModal').classList.remove('hidden');
+        }
+        function closeNicknameModal() { document.getElementById('nicknameModal').classList.add('hidden'); }
+        function saveNickname() {
+            const newNick = document.getElementById('nicknameInput').value.trim();
+            if (!newNick) return;
+            currentNickname = newNick;
+            localStorage.setItem('chatz_nickname', newNick);
+            document.getElementById('userNicknameDisplay').innerText = newNick;
+            closeNicknameModal();
+            if (currentRoomId) loadParticipants();
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('sidebarOverlay').classList.toggle('hidden');
+        }
+        function toggleRightSidebar() {
+            document.getElementById('rightSidebar').classList.toggle('translate-x-full');
+        }
+
+        async function loadRooms() {
+            if (!supabaseClient) return;
+            const { data, error } = await supabaseClient.from('rooms').select('*').order('created_at', { ascending: true });
+            if (error) {
+                document.getElementById('roomListContainer').innerHTML = `<div class="text-center text-xs text-rose-400 py-4">방 로딩 실패</div>`;
+                return;
+            }
+            rooms = data || [];
+            renderRoomList(rooms);
+            if (rooms.length > 0 && !currentRoomId) {
+                switchRoom(rooms[0].id);
+            } else if (rooms.length === 0) {
+                createDefaultRoom();
+            }
+        }
+
+        async function createDefaultRoom() {
+            const { data } = await supabaseClient.from('rooms').insert([{ name: '자유 대화방', description: '누구나 자유롭게 소통하는 공간입니다.', owner_id: currentUserId }]).select();
+            if (data) loadRooms();
+        }
+
+        function renderRoomList(roomArray) {
+            const container = document.getElementById('roomListContainer');
+            if (roomArray.length === 0) {
+                container.innerHTML = `<div class="text-center text-xs text-slate-500 py-4">생성된 방이 없습니다.</div>`;
+                return;
+            }
+            container.innerHTML = roomArray.map(room => `
+                <div onclick="switchRoom('${room.id}')" class="px-3 py-2.5 rounded-lg cursor-pointer transition flex items-center justify-between ${currentRoomId === room.id ? 'bg-purple-600/25 text-purple-300 font-medium border border-purple-500/30' : 'hover:bg-slate-800/60 text-slate-300'}">
+                    <div class="flex items-center space-x-2 truncate">
+                        <i class="fa-solid fa-hashtag text-xs opacity-60"></i>
+                        <span class="truncate text-xs">${escapeHtml(room.name)}</span>
+                    </div>
+                    ${room.owner_id === currentUserId ? '<i class="fa-solid fa-crown text-[10px] text-amber-400" title="내가 만든 방"></i>' : ''}
+                </div>
+            `).join('');
+        }
+
+        // ★ 누락되었던 방 검색 필터 함수 추가 완료!
+        function filterRooms() {
+            const keyword = document.getElementById('roomSearchInput').value.toLowerCase();
+            const filtered = rooms.filter(r => r.name.toLowerCase().includes(keyword) || (r.description && r.description.toLowerCase().includes(keyword)));
+            renderRoomList(filtered);
+        }
+
+        function openCreateRoomModal() { document.getElementById('createRoomModal').classList.remove('hidden'); }
+        function closeCreateRoomModal() { document.getElementById('createRoomModal').classList.add('hidden'); }
+        async function createRoom() {
+            const name = document.getElementById('newRoomName').value.trim();
+            const desc = document.getElementById('newRoomDesc').value.trim();
+            if (!name) return;
+            const { data } = await supabaseClient.from('rooms').insert([{ name, description: desc, owner_id: currentUserId }]).select();
+            closeCreateRoomModal();
+            loadRooms();
+            if (data && data[0]) switchRoom(data[0].id);
+        }
+
+        async function switchRoom(roomId) {
+            if (currentRoomId === roomId) return;
+            currentRoomId = roomId;
+            if (activeMessageSubscription) supabaseClient.removeChannel(activeMessageSubscription);
+
+            currentRoomData = rooms.find(r => r.id === roomId);
+            if (!currentRoomData) return;
+
+            document.getElementById('currentRoomName').innerText = currentRoomData.name;
+            document.getElementById('currentRoomDesc').innerText = currentRoomData.description || '설명이 없습니다.';
+            document.getElementById('roomInfoOwner').innerText = '방장: ' + currentRoomData.owner_id.substring(0, 8) + '...';
+            document.getElementById('roomInfoCreated').innerText = '개설일: ' + new Date(currentRoomData.created_at).toLocaleDateString();
+
+            const settingsBtn = document.getElementById('roomSettingsBtn');
+            if (currentRoomData.owner_id === currentUserId) settingsBtn.classList.remove('hidden');
+            else settingsBtn.classList.add('hidden');
+
+            renderRoomList(rooms);
+            updateRoomNoticeDisplay(currentRoomData.notice);
+            await updateParticipantPresence();
+            await loadMessages();
+            subscribeToMessages();
+            loadParticipants();
+        }
+
+        async function loadMessages() {
+            const container = document.getElementById('messageContainer');
+            const { data } = await supabaseClient.from('messages').select('*').eq('room_id', currentRoomId).order('created_at', { ascending: true }).limit(50);
+            renderMessages(data || []);
+        }
+
+        function renderMessages(msgList) {
+            const container = document.getElementById('messageContainer');
+            if (msgList.length === 0) {
+                container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-slate-500 space-y-2"><i class="fa-regular fa-comment-dots text-3xl"></i><p class="text-sm">메시지가 없습니다. 대화를 시작해 보세요!</p></div>`;
+                return;
+            }
+            container.innerHTML = msgList.map(msg => {
+                const timeStr = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const canDelete = msg.user_id === currentUserId || (currentRoomData && currentRoomData.owner_id === currentUserId);
+                return `
+                    <div class="group relative flex items-start space-x-3 p-2 rounded-lg hover:bg-slate-800/40 transition">
+                        <div class="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center font-bold text-xs text-white shrink-0">${escapeHtml(msg.nickname ? msg.nickname[0] : '익')}</div>
+                        <div class="flex-1 overflow-hidden">
+                            <div class="flex items-center space-x-2"><span class="font-bold text-xs text-slate-200">${escapeHtml(msg.nickname)}</span><span class="text-[10px] text-slate-500">${timeStr}</span></div>
+                            <div class="text-sm text-slate-300 mt-0.5 break-words">${formatMessageContent(msg.content)}</div>
+                            ${msg.file_url ? `<div class="mt-2"><a href="${msg.file_url}" target="_blank" class="text-xs text-purple-400 underline"><i class="fa-solid fa-file mr-1"></i>${escapeHtml(msg.file_name || '첨부파일')}</a></div>` : ''}
+                        </div>
+                        ${canDelete ? `<button onclick="deleteMessage('${msg.id}')" class="absolute right-3 top-2 opacity-0 group-hover:opacity-100 text-rose-400 text-xs p-1" title="삭제"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    </div>
+                `;
+            }).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function subscribeToMessages() {
+            activeMessageSubscription = supabaseClient.channel('room-' + currentRoomId)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoomId}` }, payload => {
+                    loadMessages();
+                }).subscribe();
+        }
+
+        function handleMessageKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        }
+
+        function handleFileSelected(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            selectedFile = file;
+            document.getElementById('filePreviewName').innerText = file.name;
+            document.getElementById('filePreviewBar').classList.remove('hidden');
+        }
+
+        function cancelFileAttachment() {
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('filePreviewBar').classList.add('hidden');
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            if (!content && !selectedFile) return;
+
+            let fileUrl = null, fileName = null, fileType = null;
+            if (selectedFile) {
+                const filePath = `${currentRoomId}/${Date.now()}_${selectedFile.name}`;
+                await supabaseClient.storage.from('chat-files').upload(filePath, selectedFile);
+                const { data } = supabaseClient.storage.from('chat-files').getPublicUrl(filePath);
+                fileUrl = data.publicUrl;
+                fileName = selectedFile.name;
+                fileType = selectedFile.type;
+            }
+
+            await supabaseClient.from('messages').insert([{
+                room_id: currentRoomId, user_id: currentUserId, nickname: currentNickname,
+                content: content || '[파일]', file_url: fileUrl, file_name: fileName, file_type: fileType
+            }]);
+
+            input.value = '';
+            cancelFileAttachment();
+            loadMessages();
+        }
+
+        async function deleteMessage(msgId) {
+            if (!confirm('메시지를 삭제하시겠습니까?')) return;
+            await supabaseClient.from('messages').delete().eq('id', msgId);
+            loadMessages();
+        }
+
+        async function updateParticipantPresence() {
+            await supabaseClient.from('participants').upsert([{ room_id: currentRoomId, user_id: currentUserId, nickname: currentNickname }], { onConflict: 'room_id,user_id' });
+        }
+
+        async function loadParticipants() {
+            const { data } = await supabaseClient.from('participants').select('*').eq('room_id', currentRoomId);
+            const participants = data || [];
+            document.getElementById('participantCount').innerText = participants.length;
+            document.getElementById('participantListContainer').innerHTML = participants.map(p => `
+                <div class="flex items-center space-x-2 py-1 px-2"><div class="w-2 h-2 rounded-full bg-emerald-500"></div><span class="text-xs text-slate-300 truncate">${escapeHtml(p.nickname)}</span></div>
+            `).join('');
+        }
+
+        function updateRoomNoticeDisplay(notice) {
+            const bar = document.getElementById('roomNoticeBar');
+            if (notice) {
+                document.getElementById('roomNoticeContent').innerText = notice;
+                bar.classList.remove('hidden');
+            } else { bar.classList.add('hidden'); }
+        }
+
+        function closeRoomNoticeBar() { document.getElementById('roomNoticeBar').classList.add('hidden'); }
+        function openRoomNoticeModal() {
+            document.getElementById('roomNoticeModalText').innerText = currentRoomData?.notice || '등록된 공지가 없습니다.';
+            document.getElementById('roomNoticeModal').classList.remove('hidden');
+        }
+        function closeRoomNoticeModal() { document.getElementById('roomNoticeModal').classList.add('hidden'); }
+
+        function openRoomSettingsModal() {
+            document.getElementById('editRoomNameInput').value = currentRoomData.name;
+            document.getElementById('editRoomDescInput').value = currentRoomData.description || '';
+            document.getElementById('editRoomNoticeInput').value = currentRoomData.notice || '';
+            document.getElementById('roomSettingsModal').classList.remove('hidden');
+        }
+        function closeRoomSettingsModal() { document.getElementById('roomSettingsModal').classList.add('hidden'); }
+
+        async function saveRoomSettings() {
+            const name = document.getElementById('editRoomNameInput').value.trim();
+            const desc = document.getElementById('editRoomDescInput').value.trim();
+            const notice = document.getElementById('editRoomNoticeInput').value.trim();
+            await supabaseClient.from('rooms').update({ name, description: desc, notice }).eq('id', currentRoomId);
+            closeRoomSettingsModal();
+            loadRooms();
+        }
+
+        async function deleteCurrentRoom() {
+            if (!confirm('정말로 이 채팅방을 삭제하시겠습니까?')) return;
+            await supabaseClient.from('rooms').delete().eq('id', currentRoomId);
+            closeRoomSettingsModal();
+            currentRoomId = null;
+            loadRooms();
+        }
+
+        async function loadSiteNotice() {
+            const { data } = await supabaseClient.from('site_notices').select('*').order('created_at', { ascending: false }).limit(1);
+            if (data && data.length > 0) {
+                document.getElementById('siteNoticeText').innerText = data[0].content;
+                document.getElementById('siteNoticeBanner').classList.remove('hidden');
+                document.getElementById('siteNoticeModalContent').innerText = data[0].content;
+            }
+        }
+
+        function openNoticeModal() { document.getElementById('noticeModal').classList.remove('hidden'); }
+        function closeNoticeModal() { document.getElementById('noticeModal').classList.add('hidden'); }
+        function openAdminModal() { document.getElementById('adminModal').classList.remove('hidden'); }
+        function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); }
+
+        async function saveAdminNotice() {
+            const key = document.getElementById('adminKeyInput').value.trim();
+            const content = document.getElementById('adminNoticeInput').value.trim();
+            if (!key || !content) { alert('관리자 키와 내용을 입력하세요.'); return; }
+            await supabaseClient.from('site_notices').insert([{ content, admin_key: key }]);
+            alert('공지가 게시되었습니다.');
+            closeAdminModal();
+            loadSiteNotice();
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function formatMessageContent(content) {
+            if (!content) return '';
+            const safe = escapeHtml(content);
+            return safe.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-purple-400 underline">$1</a>');
+        }
+    </script>
+</body>
+</html>
